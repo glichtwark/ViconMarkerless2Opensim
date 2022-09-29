@@ -1,29 +1,59 @@
 clear
-%%
-% define the pose_stick connections
-pose_stick = [1, 8; 1, 9; 12, 13; 12, 24; 24, 25; 13, 25; ...  torso and head
-        12, 14; 14, 16; 16, 20; 16, 22; ...left arm
-        13, 15; 15, 17; 17, 21; 17, 23; ... right arm
-        24, 26; 26, 28; 28, 30; 30, 32; 28, 32; ... left leg
-        25, 27; 27, 29; 29, 31; 31, 33; 29, 33]; %right leg
-    
-%% first load the files
-% [csvfiles, pathname, filterindex] = uigetfile('*.csv', 'Select CSV files','MultiSelect','on');
-% cd (pathname)
-csvfiles = dir('*.csv');
-xcp_file = dir('*_adj.xcp');
+%% select the folder with data in it
+data_directory = uigetdir(cd, 'Select the folder with video files and XCP data in it');
+cd(data_directory);
+
+%%  load the csv files and calibration file
+xcp_file = dir('*.xcp');
+
+if length(xcp_file)>1
+    disp('There are more than one XCP files in directory, please ensure only one')
+    return;
+end
 
 cam = XCP_camera_params(xcp_file(1).name);
+
+%% run mediapipe analysis via python wrapper across all avi files in directory
+%pyversion('C:\ProgramData\Anaconda3\pythonw.exe'); % may need to run first if python version not loaded. 
+
+mp_path = fileparts(which('media_pipe_3D_reconstruction.m'));
+if count(py.sys.path,mp_path) == 0
+    insert(py.sys.path,int32(0),mp_path)
+end
+
+% get names of all avi (video) files in the folder
+avifiles = dir('*.avi');
+
+% get names of all of the any existing csvfiles
+csvfiles = dir('*.csv');
+if ~isempty(csvfiles)
+    run_mediapipe = input('CSV files already exist. Do you want to re-process (Y/N)  ','s');  
+else 
+    run_mediapipe = 'Y';
+end
+
+if strcmp(run_mediapipe,'Y')
+    for F = 1:length(avifiles)
+        disp(['Processing ' avifiles(F).name ' .....']);
+        py.mediapipe_pose_estimation_markerless.mediapipe_video_analysis([avifiles(F).folder '\' avifiles(F).name]);
+    end
+end
+
+% get names of all of the newly made csvfiles
+csvfiles = dir('*.csv');
 
 %% loop through csv files and open them and extract the landmark information and store to data structure
 for F = 1:length(csvfiles)
     % load data fle
     data.data2d{F} = load_mediapipe_csv(csvfiles(F).name);
     % get frame_np time stamps for filtering and gap filling
-    frame_no = table2array(data.data2d{F}(:,1));
+    frame_no = table2array(data.data2d{F}(:,1));    
     time = table2array(data.data2d{F}(:,2));
-    time = (interp1(frame_no,time,frame_no(1):frame_no(end),'linear'))';
-    dt = median(diff(time));
+    dt = nanmedian(diff(time));
+    time = (1:frame_no(end))'*dt;    
+    
+    idx=ismember(1:numel(time),frame_no);
+    
     for i = 3:4:size(data.data2d{1},2)
         MNAME = data.data2d{F}.Properties.VariableNames{i};
         MNAME = MNAME(1:end-2);        
@@ -33,9 +63,12 @@ for F = 1:length(csvfiles)
         % undistort points
         XY = undistortPoints(XY,cam.cam_dist{F});
         % interpolate across any missing frames
-        X = (interp1(frame_no,XY(:,1),frame_no(1):frame_no(end),'spline'))';
-        Y = (interp1(frame_no,XY(:,2),frame_no(1):frame_no(end),'spline'))';
-        C = (interp1(frame_no,table2array(data.data2d{F}(:,i+3)),frame_no(1):frame_no(end),'linear'))';
+        X = (interp1(frame_no,XY(:,1),1:frame_no(end),'linear'))';
+        Y = (interp1(frame_no,XY(:,2),1:frame_no(end),'linear'))';
+        C = (interp1(frame_no,table2array(data.data2d{F}(:,i+3)),1:frame_no(end),'linear'))';        
+        X(~idx) = 0;
+        Y(~idx) = 0;
+        C(~idx) = 0;
         % low pass filter
         X_filt = matfiltfilt_low(dt,6,2,X); % 6Hz low pass filter
         Y_filt = matfiltfilt_low(dt,6,2,Y); % 6Hz low pass filter
@@ -46,20 +79,52 @@ for F = 1:length(csvfiles)
     end
 end
 
+% savve the frame no, time, frame_rate to data structure
 data.frame(:,1) = frame_no(1):1:frame_no(end);
 data.time = time;
 data.frame_rate = 1/dt;
+% get information about the number of frames and markers for doing
+% triangulation
 nframes = size(data.data2d{1},1);
 markers = fieldnames(data.markers2D);
+
+%% define the pose_stick connections
+pose_stick = [1, 8; 1, 9; 12, 13; 12, 24; 24, 25; 13, 25; ...  torso and head
+        12, 14; 14, 16; 16, 20; 16, 22; ...left arm
+        13, 15; 15, 17; 17, 21; 17, 23; ... right arm
+        24, 26; 26, 28; 28, 30; 30, 32; 28, 32; ... left leg
+        25, 27; 27, 29; 29, 31; 31, 33; 29, 33]; %right leg
+    
 %% loop through each frame and triangulat all markers to get XYZ coordinates
 figure;
+% define a confidence threshold - only do triangulation on cameras that
+% have a confidence value above this threshold
+a = 1:8; % array numbering each camera
+conf_thresh = 0.6; % threshold
 
+% loop through all frames and do triangulation on all markers and then draw
+% animation
 for i = 1:nframes
     for j = 1:length(markers)
-        data.PT{i,j} = pointTrack(1:8,squeeze(data.markers2D.(markers{j}).XY(i,:,:))');
+        s = 0.1;
+        % find which cameras have confidence above threshold for current
+        % frame and marker
+        a_thresh = a(data.markers2D.(markers{j}).C(i,:)>conf_thresh);
+        % if there aren't more than 2 cameras above threshold reduce it
+        % temporarily and let the user know
+        while length(a_thresh) < 2
+            a_thresh = a(data.markers2D.(markers{j}).C(i,:)>(conf_thresh-s));
+            s = s + 0.1;
+            disp(['Reduced confidence threshold to ' num2str(conf_thresh-s) ' for ' markers{j} ' in frame number ' num2str(i)]);
+        end
+        % only write those above threshold to the pointTrack structure
+        data.PT{i,j} = pointTrack(a_thresh,squeeze(data.markers2D.(markers{j}).XY(i,:,a_thresh))');
+        % undertake triangulation on pointTracks (based on camera matrix)
         data.worldPoints{i,j} = vision.internal.triangulateMultiViewPoints(data.PT{i,j}, cam.cam_matrix);
     end
-    data.XYZ(:,:,i) = (reshape([data.worldPoints{i,:}],3,length(markers)))'/1000; % convert from mm to m
+    % convert from mm to m
+    data.XYZ(:,:,i) = (reshape([data.worldPoints{i,:}],3,length(markers)))'/1000; 
+    % run animation
     if i == 1
         p = plot3(data.XYZ(:,1,i),data.XYZ(:,2,i),data.XYZ(:,3,i),'.b', 'MarkerSize',4);
         hold off        
@@ -68,7 +133,7 @@ for i = 1:nframes
         p.YData = data.XYZ(:,2,i)';
         p.ZData = data.XYZ(:,3,i)';
     end
-    
+    % draw lines (stick figure) between selected points
     for j = 1:length(pose_stick)
         if i == 1
             L(j) = line(data.XYZ(pose_stick(j,:),1,i)',data.XYZ(pose_stick(j,:),2,i)',data.XYZ(pose_stick(j,:),3,i)','Color','k','LineWidth',2);
@@ -85,13 +150,16 @@ for i = 1:nframes
         
 end
 
-hold on;
-for c = 1:length(cam.Location)
-    plotCamera('Location',cam.Location{c}/1000,'Orientation',cam.Orientation{c},'Size',0.2);hold on;
-end
-hold off;
-    
-TRC_Filename = [cd '\' xcp_file.name(1:end-8) '.trc'];
+%% check the camera positions are in the write position relative to the person if there is a problem
+% hold on;
+% for c = 1:length(cam.Location)
+%     plotCamera('Location',cam.Location{c}/1000,'Orientation',cam.Orientation{c},'Size',0.15);hold on;
+% end
+% hold off;
+
+
+%% write the 3D data to a TRC filename for subsequent opensim modelling
+TRC_Filename = [cd '\' xcp_file.name(1:end-4) '.trc'];
 mediapipepose2trc(data, TRC_Filename);
 
 %% process opensim model - start by scaling generic model
@@ -146,7 +214,7 @@ MP.setTimeRange(time_range);
 ScTool.setSubjectMass(mass);
 
 %create the ModelScaling directory above c3d directory if it doesn't exist
-if isempty(dir([cd 'ModelScaling']))
+if isempty(dir([cd '\ModelScaling']))
     mkdir(cd,'ModelScaling');
 end
 %write new .xml file in setup folder
@@ -169,7 +237,7 @@ ikTool.setModel(model);
 
 %create the InverseKinematics directory above c3d directory if it
 %doesn't exist
-if isempty(dir([data_path 'InverseKinematics']))
+if isempty(dir([data_path '\InverseKinematics']))
     mkdir(data_path,'InverseKinematics');
 end
 
@@ -207,7 +275,7 @@ body_settings_file = 'C:\Users\uqglicht_local\OneDrive - The University of Queen
             
 %create the InverseKinematics directory above c3d directory if it
 %doesn't exist
-if isempty(dir([data_path 'BodyKinematics']))
+if isempty(dir([data_path '\BodyKinematics']))
     mkdir(data_path,'BodyKinematics');
 end
 

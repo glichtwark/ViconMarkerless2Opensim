@@ -49,7 +49,7 @@ for I = 1:length(S.Cameras.Camera)
         q = str2num(S.Cameras.Camera{I}.KeyFrames.KeyFrame.Attributes.ORIENTATION);
         qt = quaternion(q(4), q(1), q(2), q(3));
         % rotation matrix
-        RM = rotmat(qt,'point');
+        RM = rotmat(qt,'point'); % this is essentially the transpose of frame reference
         rotation = RM';        
         
         % translation matrix

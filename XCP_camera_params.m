@@ -45,9 +45,7 @@ for I = 1:length(S.Cameras.Camera)
         PP = str2num(S.Cameras.Camera{I}.KeyFrames.KeyFrame.Attributes.PRINCIPAL_POINT);
         % focal length
         FL = str2double(S.Cameras.Camera{I}.KeyFrames.KeyFrame.Attributes.FOCAL_LENGTH);
-        % intrinsics matrix
-        IM = [FL 0 0;0 FL 0;PP(1) PP(2) 1];
-     
+             
         % load vicon radial2 pararameters
         VR = (S.Cameras.Camera{I}.KeyFrames.KeyFrame.Attributes.VICON_RADIAL2);
         % only use the numbers (not string)
@@ -73,6 +71,10 @@ for I = 1:length(S.Cameras.Camera)
         
         %cam.cam_params{c} = cameraParameters('IntrinsicMatrix',IM,'RadialDistortion',RD);         
         % define intrinsics matrix
+        % intrinsic_matrix = [FocalLength(1)  , 0 , 0; ...
+        %                     Skew,   FocalLength(2) , 0; ...
+        %                    PrincipalPoint(1), PrincipalPoint(2), 1]; 
+        % note that focalLength(2) is generally the same as FL1
         cam.cam_intrinsics{c} = cameraIntrinsics(FL,PP,IS);
         cam.cam_dist{c} = cameraParameters('RadialDistortion',RD);
         
@@ -80,13 +82,13 @@ for I = 1:length(S.Cameras.Camera)
         % Transformation from world coordinates to camera coordinates. The transformation allows you to transform points from the world coordinate system to the camera coordinate system. tform is computed as:
         % tform.Rotation = cameraPose.Rotation'
         % tform.Translation = -cameraPose.Translation * cameraPose.Rotation'
-        [rotationMatrix(:,:,c),translationVector(:,c)] = cameraPoseToExtrinsics(RM(:,:,c),T(:,c));
+        [cam.rotationMatrix(:,:,c),cam.translationVector(:,c)] = cameraPoseToExtrinsics(RM(:,:,c),T(:,c));
         
         % determine the camera projection matrix (4 x 3)
         %The function computes camMatrix as follows:
         %     camMatrix = [rotationMatrix; translationVector] × K.
         %     K: the intrinsic matrix
-        cam.cam_matrix{c} = cameraMatrix(cam.cam_intrinsics{c},rotationMatrix(:,:,c),translationVector(:,c));
+        cam.cam_matrix{c} = cameraMatrix(cam.cam_intrinsics{c},cam.rotationMatrix(:,:,c),cam.translationVector(:,c));
         
         cam.cam_id{c} = uint32(c);
         
