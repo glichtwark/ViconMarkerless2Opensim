@@ -8,3 +8,5 @@ Matlab pipeline to run opensource pose estimation (e.g. Mediapipe) on multicamer
 5. Run media_pipe_3D_reconstruction.m file
 
 ![Workflow Image](workflow.JPG)
+
+Please acknowledge Glen Lichtwark via GitHub repository link where appropriate
