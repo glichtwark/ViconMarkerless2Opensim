@@ -7,3 +7,6 @@ Matlab pipeline to run opensource pose estimation (e.g. Mediapipe) on multicamer
 4. Data folder requires each video file named with the name of each camera (from Vicon) and XCP (vicon calibration) file
 5. Run media_pipe_3D_reconstruction.m file
 
+![Workflow Image](workflow.JPG)
+
+Please acknowledge Glen Lichtwark via GitHub repository link where appropriate
