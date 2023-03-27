@@ -102,6 +102,8 @@ figure;
 a = 1:8; % array numbering each camera
 conf_thresh = 0.6; % threshold
 
+vidObj = VideoWriter('output_stick_video.avi');
+open(vidObj)
 % loop through all frames and do triangulation on all markers and then draw
 % animation
 for i = 1:nframes
@@ -147,8 +149,11 @@ for i = 1:nframes
     drawnow
     axis equal
     %axis([-800 0 -200 1200 0 1800]/1000) 
-        
+    currFrame = getframe(gcf);
+    writeVideo(vidObj,currFrame);    
 end
+
+close(vidObj);
 
 %% check the camera positions are in the write position relative to the person if there is a problem
 % hold on;
@@ -308,8 +313,8 @@ disp(['Processing ' mot_file '....']);
 tool.run();
 vel_data = load_sto_file([data_path '\BodyKinematics\' fname '\' fname '_BodyKinematics_vel_global.sto']);
 time = vel_data.time(1:end-1);
-acc_vert = smooth(diff(vel_data.center_of_mass_Y)./diff(vel_data.time),7);
-acc_horz = smooth(diff(vel_data.center_of_mass_X)./diff(vel_data.time),7);
+acc_vert = smooth(diff(vel_data.center_of_mass_Y)./diff(vel_data.time),3);
+acc_horz = smooth(diff(vel_data.center_of_mass_X)./diff(vel_data.time),3);
 force_vert = (mass*acc_vert) + (mass*9.8);
 force_horz = (mass*acc_horz);
 out = [time acc_vert acc_horz force_vert force_horz];
