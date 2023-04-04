@@ -52,7 +52,7 @@ for F = 1:length(csvfiles)
     dt = nanmedian(diff(time));
     time = (1:frame_no(end))'*dt;    
     
-    idx=ismember(1:numel(time),frame_no);
+    idx = ismember(1:numel(time),frame_no);
     
     for i = 3:4:size(data.data2d{1},2)
         MNAME = data.data2d{F}.Properties.VariableNames{i};
@@ -72,20 +72,20 @@ for F = 1:length(csvfiles)
         % low pass filter
         X_filt = matfiltfilt_low(dt,6,2,X); % 6Hz low pass filter
         Y_filt = matfiltfilt_low(dt,6,2,Y); % 6Hz low pass filter
-        %store to marker structure
+        % store to marker structure
         data.markers2D.(MNAME).XY(:,1,F) = X_filt;
         data.markers2D.(MNAME).XY(:,2,F) = Y_filt;
         data.markers2D.(MNAME).C(:,F) = C;
     end
 end
 
-% savve the frame no, time, frame_rate to data structure
+% save the frame no, time, frame_rate to data structure
 data.frame(:,1) = frame_no(1):1:frame_no(end);
 data.time = time;
 data.frame_rate = 1/dt;
 % get information about the number of frames and markers for doing
 % triangulation
-nframes = size(data.data2d{1},1);
+nframes = size(data.markers2D.(MNAME).XY,1); % nframes = size(data.data2d{1},1);
 markers = fieldnames(data.markers2D);
 
 %% define the pose_stick connections
@@ -155,7 +155,7 @@ end
 
 close(vidObj);
 
-%% check the camera positions are in the write position relative to the person if there is a problem
+%% check the camera positions are in the right position relative to the person if there is a problem
 % hold on;
 % for c = 1:length(cam.Location)
 %     plotCamera('Location',cam.Location{c}/1000,'Orientation',cam.Orientation{c},'Size',0.15);hold on;
@@ -172,13 +172,13 @@ import org.opensim.modeling.*
 mass = str2double(input('Enter mass in KG and press Enter:   ','s'));    
 p_name = input('Enter participant code:   ','s');   
 
-generic_model = 'C:\Users\uqglicht_local\OneDrive - The University of Queensland\Documents\Jarvis\Rajagopal2015_mediapipe_head.osim';
-scale_settings_file = 'C:\Users\uqglicht_local\OneDrive - The University of Queensland\Documents\Jarvis\scale_settings_mediapipe.xml';
+generic_model = [mp_path '\Rajagopal2015_mediapipe_head.osim'];
+scale_settings_file = [mp_path '\scale_settings_mediapipe.xml'];
 scaled_model = [cd '\ModelScaling\' p_name '_modelScaled' '.osim'];
 
 disp('Scale Tool Processing....')
 
-%load scale tool and associated tools
+% load scale tool and associated tools
 ScTool = ScaleTool(scale_settings_file);
 ScTool.setName(p_name)
 ScTool.setPathToSubject('');
@@ -186,11 +186,11 @@ GMM = ScTool.getGenericModelMaker;
 MS = ScTool.getModelScaler;
 MP = ScTool.getMarkerPlacer;
 
-%add model to generic setup file
+% add model to generic setup file
 GMM.setModelFileName(generic_model);
 GMM.setName(generic_model);
 
-%add output files
+% add output files
 MS.setOutputScaleFileName([cd '\ModelScaling\' p_name '_scaleSetApplied' '.xml']);
 MS.setOutputModelFileName([cd '\ModelScaling\' p_name '_modelScaled' '.osim']);
 MP.setOutputMotionFileName([cd '\ModelScaling\' p_name '_static' '.mot']);
@@ -208,21 +208,21 @@ markerData = MarkerData(TRC_Filename);
 InitialTime = markerData.getStartFrameTime();
 FinalTime = markerData.getLastFrameTime();
 
-%add time range
+% add time range
 time_range = ArrayDouble;
 time_range.append(FinalTime-0.1);
 time_range.append(FinalTime);
 MS.setTimeRange(time_range);
 MP.setTimeRange(time_range);
 
-%add mass
+% add mass
 ScTool.setSubjectMass(mass);
 
-%create the ModelScaling directory above c3d directory if it doesn't exist
+% create the ModelScaling directory above c3d directory if it doesn't exist
 if isempty(dir([cd '\ModelScaling']))
     mkdir(cd,'ModelScaling');
 end
-%write new .xml file in setup folder
+% write new .xml file in setup folder
 ScTool.print([cd '\ModelScaling\' p_name '_setupScale.xml']);
 % run scaling tool;
 ScTool.run();
@@ -231,7 +231,7 @@ disp('DONE.');
 disp('IK Tool Processing....');
 data_path = cd;
 
-ik_settings_file = 'C:\Users\uqglicht_local\OneDrive - The University of Queensland\Documents\Jarvis\IK_settings_mediapipe.xml';
+ik_settings_file = [mp_path '\IK_settings_mediapipe.xml'];
 
 ikTool = InverseKinematicsTool(ik_settings_file);
 
@@ -276,16 +276,16 @@ disp(['DONE.']);
 
 %% run body kinematics
 
-body_settings_file = 'C:\Users\uqglicht_local\OneDrive - The University of Queensland\Documents\Jarvis\body_kinematics_settings_mediapipe.xml';
+body_settings_file = [mp_path '\body_kinematics_settings_mediapipe.xml'];
             
-%create the InverseKinematics directory above c3d directory if it
-%doesn't exist
+% create the InverseKinematics directory above c3d directory if it
+% doesn't exist
 if isempty(dir([data_path '\BodyKinematics']))
     mkdir(data_path,'BodyKinematics');
 end
 
-hd = ['time' '\t' 'vertical_acc' '\t' 'horizontal_acc' '\t' 'vertical_force' '\t' 'horizontal_force' '\n'];
-fm = ['%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\n'];
+hd = ['time' '\t' 'vertical_acc' '\t' 'horizontal_acc' '\t' 'mediolateral_acc' '\t' 'vertical_force' '\t' 'horizontal_force' '\t' 'mediolateral_force' '\n'];
+fm = ['%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\n'];
 
 [~,fname,~] = fileparts(TRC_Filename);
 mot_file = [data_path '\InverseKinematics\' fname '.mot'];
@@ -315,9 +315,11 @@ vel_data = load_sto_file([data_path '\BodyKinematics\' fname '\' fname '_BodyKin
 time = vel_data.time(1:end-1);
 acc_vert = smooth(diff(vel_data.center_of_mass_Y)./diff(vel_data.time),3);
 acc_horz = smooth(diff(vel_data.center_of_mass_X)./diff(vel_data.time),3);
+acc_mela = smooth(diff(vel_data.center_of_mass_Z)./diff(vel_data.time),3);
 force_vert = (mass*acc_vert) + (mass*9.8);
 force_horz = (mass*acc_horz);
-out = [time acc_vert acc_horz force_vert force_horz];
+force_mela = (mass*acc_mela);
+out = [time acc_vert acc_horz acc_mela force_vert force_horz force_mela];
 fileout = [data_path '\BodyKinematics\' fname '_acc_force.txt'];
 
 fid_1 = fopen(fileout,'w');
